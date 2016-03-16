@@ -335,6 +335,12 @@ func (p *OAuthProxy) SignInPage(rw http.ResponseWriter, req *http.Request, code 
 	if redirect_url == p.SignInPath {
 		redirect_url = "/"
 	}
+	// make redirect url absolute
+	scheme := "http"
+	if p.CookieSecure {
+		scheme = "https"
+	}
+	redirect_url = fmt.Sprintf("%s://%s%s", scheme, req.Host, redirect_url)
 
 	t := struct {
 		ProviderName  string
@@ -369,6 +375,19 @@ func (p *OAuthProxy) ManualSignIn(rw http.ResponseWriter, req *http.Request) (st
 		return user, true
 	}
 	return "", false
+}
+
+func (p *OAuthProxy) IsValidRedirect(redirect string) (ok bool) {
+	url, err := url.Parse(redirect)
+
+	if err != nil {
+		return false
+	}
+
+	arr := strings.Split(url.Host, ":")
+	host := arr[0]
+
+	return host == "" || strings.HasSuffix(host, p.CookieDomain)
 }
 
 func (p *OAuthProxy) GetRedirect(req *http.Request) (string, error) {
@@ -476,7 +495,7 @@ func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	redirect := req.Form.Get("state")
-	if !strings.HasPrefix(redirect, "/") {
+	if redirect == "" || !p.IsValidRedirect(redirect) {
 		redirect = "/"
 	}
 
